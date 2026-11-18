@@ -18,12 +18,10 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.datemate.viewmodel.ProductViewModel
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
-// Структура для категории с иконкой
 data class CategoryOption(val name: String, val icon: ImageVector)
-
-// Структура для места хранения с иконкой
 data class StoragePlaceOption(val name: String, val icon: ImageVector)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -35,8 +33,9 @@ fun AddEditProductScreen(
 ) {
     val context = LocalContext.current
     val products by viewModel.products.collectAsState()
+    val productHistory by viewModel.productHistory.collectAsState() // <-- История продуктов
+    val coroutineScope = rememberCoroutineScope()
 
-    // Ищем продукт в базе, если открыли экран редактирования
     val existingProduct = remember(productId, products) {
         products.find { it.id == productId }
     }
@@ -47,15 +46,17 @@ fun AddEditProductScreen(
     var expiryDate by remember { mutableStateOf(existingProduct?.expiryDate ?: "") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
-    // Расширенный список категорий с иконками
-    // Расширенный список категорий с иконками
+    // Состояние для автодополнения
+    var isHistoryDropdownVisible by remember { mutableStateOf(false) }
+    var filteredHistory by remember { mutableStateOf<List<String>>(emptyList()) }
+
     val categories = listOf(
         CategoryOption("Молочные продукты", Icons.Default.LocalDrink),
         CategoryOption("Овощи", Icons.Default.Eco),
         CategoryOption("Фрукты", Icons.Default.Grass),
         CategoryOption("Мясо", Icons.Default.KebabDining),
         CategoryOption("Рыба", Icons.Default.SetMeal),
-        CategoryOption("Бакалея", Icons.Default.Grass),
+        CategoryOption("Бакалея", Icons.Default.LocalGroceryStore),
         CategoryOption("Напитки", Icons.Default.LocalBar),
         CategoryOption("Заморозка", Icons.Default.AcUnit),
         CategoryOption("Сладости", Icons.Default.Cake),
@@ -64,15 +65,14 @@ fun AddEditProductScreen(
         CategoryOption("Другое", Icons.Default.MoreHoriz)
     )
 
-    // Расширенный список мест хранения с иконками
     val storagePlaces = listOf(
         StoragePlaceOption("Холодильник", Icons.Default.Kitchen),
         StoragePlaceOption("Морозильная камера", Icons.Default.AcUnit),
-        StoragePlaceOption("Шкаф", Icons.Default.ViewSidebar),
-        StoragePlaceOption("Кладовая", Icons.Default.RoomPreferences),
-        StoragePlaceOption("Полка", Icons.Default.ViewDay),
+        StoragePlaceOption("Шкаф", Icons.Default.Storage),
+        StoragePlaceOption("Кладовая", Icons.Default.Home),
+        StoragePlaceOption("Полка", Icons.Default.ViewList),
         StoragePlaceOption("Подоконник", Icons.Default.Window),
-        StoragePlaceOption("Стол", Icons.Default.Desk),
+        StoragePlaceOption("Стол", Icons.Default.Dining),
         StoragePlaceOption("Другое", Icons.Default.MoreHoriz)
     )
 
@@ -122,22 +122,82 @@ fun AddEditProductScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Название продукта
-            OutlinedTextField(
-                value = name,
-                onValueChange = {
-                    name = it
-                    errorMessage = null
-                },
-                label = { Text("Название продукта*") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                singleLine = true
-            )
+            // Название продукта с автодополнением
+            Column {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        errorMessage = null
+                        // Фильтруем историю по введённому тексту
+                        filteredHistory = productHistory.filter {
+                            it.contains(name, ignoreCase = true) && it != name
+                        }
+                        isHistoryDropdownVisible = filteredHistory.isNotEmpty() && name.isNotBlank()
+                    },
+                    label = { Text("Название продукта*") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp)),
+                    shape = RoundedCornerShape(16.dp),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (name.isNotBlank()) {
+                            IconButton(onClick = { name = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Очистить")
+                            }
+                        }
+                    }
+                )
 
-            // Выбор категории с иконками
+                // Выпадающий список подсказок
+                if (isHistoryDropdownVisible && filteredHistory.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            filteredHistory.take(5).forEach { suggestion ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            name = suggestion
+                                            isHistoryDropdownVisible = false
+                                            // Автоматически заполняем категорию и место из истории
+                                            coroutineScope.launch {
+                                                val historyProduct = viewModel.getProductFromHistory(suggestion)
+                                                if (historyProduct != null) {
+                                                    category = historyProduct.category
+                                                    storagePlace = historyProduct.storagePlace
+                                                }
+                                            }
+                                        }
+                                        .padding(vertical = 8.dp, horizontal = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = suggestion,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Выбор категории
             ExposedDropdownMenuBox(
                 expanded = categoryExpanded,
                 onExpandedChange = { categoryExpanded = !categoryExpanded }
@@ -161,21 +221,9 @@ fun AddEditProductScreen(
                     categories.forEach { item ->
                         DropdownMenuItem(
                             text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = null,
-                                        tint = if (item.name == category) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = item.name,
-                                        color = if (item.name == category) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(imageVector = item.icon, contentDescription = null, tint = if (item.name == category) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                    Text(text = item.name, color = if (item.name == category) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                                 }
                             },
                             onClick = {
@@ -187,7 +235,7 @@ fun AddEditProductScreen(
                 }
             }
 
-            // Выбор места хранения с иконками
+            // Выбор места хранения
             ExposedDropdownMenuBox(
                 expanded = storageExpanded,
                 onExpandedChange = { storageExpanded = !storageExpanded }
@@ -211,21 +259,9 @@ fun AddEditProductScreen(
                     storagePlaces.forEach { item ->
                         DropdownMenuItem(
                             text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = item.icon,
-                                        contentDescription = null,
-                                        tint = if (item.name == storagePlace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = item.name,
-                                        color = if (item.name == storagePlace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Icon(imageVector = item.icon, contentDescription = null, tint = if (item.name == storagePlace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                                    Text(text = item.name, color = if (item.name == storagePlace) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
                                 }
                             },
                             onClick = {
@@ -237,12 +273,12 @@ fun AddEditProductScreen(
                 }
             }
 
-            // Срок годности с календарем
+            // Срок годности
             OutlinedTextField(
                 value = expiryDate,
                 onValueChange = {},
                 readOnly = true,
-                label = { Text("Срок годности*") },
+                label = { Text("Срок годности / Истекает*") },
                 placeholder = { Text("Нажмите, чтобы выбрать дату") },
                 trailingIcon = {
                     IconButton(onClick = showDatePicker) {
@@ -258,11 +294,7 @@ fun AddEditProductScreen(
             )
 
             errorMessage?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -274,7 +306,6 @@ fun AddEditProductScreen(
                         errorMessage = "Пожалуйста, введите название и выберите срок годности"
                     } else {
                         if (existingProduct != null) {
-                            // Редактирование
                             val updated = existingProduct.copy(
                                 name = name.trim(),
                                 category = category,
@@ -283,20 +314,19 @@ fun AddEditProductScreen(
                             )
                             viewModel.updateProduct(updated)
                         } else {
-                            // Создание нового
                             viewModel.addProduct(
                                 name = name.trim(),
                                 category = category,
                                 storagePlace = storagePlace,
                                 expiryDate = expiryDate
                             )
+                            // Сохраняем в историю для автодополнения
+                            viewModel.saveToHistory(name.trim(), category, storagePlace)
                         }
                         onNavigateBack()
                     }
                 },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Text(

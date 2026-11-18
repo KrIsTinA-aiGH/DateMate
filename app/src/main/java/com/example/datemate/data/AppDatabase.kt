@@ -6,14 +6,21 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ProductEntity::class, ShoppingItem::class, SettingsEntity::class],
-    version = 3,
+    entities = [
+        ProductEntity::class,
+        ShoppingItem::class,
+        SettingsEntity::class,
+        ProductHistoryEntity::class // <-- Обязательно добавлено сюда
+    ],
+    version = 4, // Версия увеличена для миграции
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+
     abstract fun productDao(): ProductDao
     abstract fun shoppingListDao(): ShoppingListDao
     abstract fun settingsDao(): SettingsDao
+    abstract fun productHistoryDao(): ProductHistoryDao // <-- Добавлен DAO
 
     companion object {
         @Volatile
@@ -26,7 +33,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "datemate_database"
                 )
-                    .fallbackToDestructiveMigration()
+                    .fallbackToDestructiveMigration() // Автоматически пересоздаст базу при смене версии
                     .build()
                 INSTANCE = instance
                 instance

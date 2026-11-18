@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.datemate.data.AppDatabase
 import com.example.datemate.data.ProductEntity
+import com.example.datemate.data.ProductHistoryEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,12 +22,19 @@ enum class SortType {
 class ProductViewModel(application: Application) : AndroidViewModel(application) {
 
     private val dao = AppDatabase.getDatabase(application).productDao()
+    private val historyDao = AppDatabase.getDatabase(application).productHistoryDao()
 
     // Состояния фильтров и сортировки
     val searchQuery = MutableStateFlow("")
     val selectedCategory = MutableStateFlow<String?>(null)
     val selectedStoragePlace = MutableStateFlow<String?>(null)
     val sortType = MutableStateFlow(SortType.BY_DATE)
+    val productHistory: StateFlow<List<String>> = historyDao.getAllProductNames()
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
 
     // Основной поток: берём все продукты из БД и применяем ВСЕ фильтры + сортировку
     val products: StateFlow<List<ProductEntity>> = combine(
@@ -104,5 +112,21 @@ class ProductViewModel(application: Application) : AndroidViewModel(application)
 
     fun setSortType(type: SortType) {
         sortType.value = type
+    }
+    // Метод для сохранения продукта в историю
+    fun saveToHistory(name: String, category: String, storagePlace: String) {
+        viewModelScope.launch {
+            historyDao.insertProductHistory(
+                ProductHistoryEntity(
+                    name = name.trim(),
+                    category = category,
+                    storagePlace = storagePlace
+                )
+            )
+        }
+    }
+    // Метод для получения данных продукта из истории (для быстрого заполнения)
+    suspend fun getProductFromHistory(name: String): ProductHistoryEntity? {
+        return historyDao.getProductByName(name)
     }
 }
