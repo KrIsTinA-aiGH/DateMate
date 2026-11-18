@@ -142,14 +142,32 @@ fun MainScreen(
                         .height(48.dp)
                         .padding(top = 13.dp)
                         .clip(RoundedCornerShape(24.dp)),
-                    placeholder = { Text("Поиск продуктов...", style = MaterialTheme.typography.bodyMedium) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    placeholder = {
+                        Text(
+                            "Поиск продуктов...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant // Цвет placeholder
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant // Цвет иконки лупы
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(24.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        color = MaterialTheme.colorScheme.onSurface // <-- Явный цвет текста
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        cursorColor = MaterialTheme.colorScheme.primary // Цвет курсора
                     )
                 )
                 Spacer(modifier = Modifier.height(12.dp))
